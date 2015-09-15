@@ -60,3 +60,22 @@ User.pre('save', function (next) {
 
 You must provide your own body parsing middleware. A `req.body` object must be
 available for the post/create middleware to work.
+
+### Custom middleware
+
+Custom middleware can be accessed using `Model.router()` and has the model
+exposed via `req.Model`:
+
+```javascript
+schema.plugin(router, {
+  middleware: {
+    myMiddleware: function (req, res, next) {
+      console.log(req.Model);
+      next();
+    }
+  }
+});
+
+// Returns middleware
+User.router('myMiddleware');
+```

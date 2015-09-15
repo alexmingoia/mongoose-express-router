@@ -6,6 +6,7 @@ module.exports = function (schema, options) {
   schema.statics.router = function (op) {
     if (!router) {
       router = routerGetter(this, {
+        middleware: options && options.middleware,
         sessionKey: options && options.sessionKey || 'session'
       });
     }
@@ -19,6 +20,19 @@ module.exports = function (schema, options) {
 function routerGetter(Model, options) {
   var sessionKey = options.sessionKey;
   var router = express.Router();
+
+  if (options.middleware) {
+    Object.keys(options.middleware).forEach(function (key) {
+      if (router[key]) {
+        throw new Error('router.' + key + ' already exists');
+      } else {
+        router[key] = function (req, res, next) {
+          req.Model = Model;
+          options.middleware[key].apply(this, arguments);
+        };
+      }
+    });
+  }
 
   router.find = function (req, res, next) {
     var mQuery = query(Model.find(), req, sessionKey);
