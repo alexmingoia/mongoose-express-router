@@ -1,12 +1,27 @@
 var express = require('express');
 
-module.exports = function (Model, opts) {
+module.exports = function (schema, options) {
+  var router;
+
+  schema.statics.router = function (op) {
+    if (!router) {
+      router = routerGetter(this, {
+        sessionKey: options && options.sessionKey || 'session'
+      });
+    }
+
+    return op ? router[op] : router;
+  };
+
+  return schema;
+};
+
+function routerGetter(Model, options) {
+  var sessionKey = options.sessionKey;
   var router = express.Router();
-  opts = opts || {};
-  opts.sessionKey = opts.sessionKey || 'session';
 
   router.find = function (req, res, next) {
-    var mQuery = mongoQuery(req, Model.find);
+    var mQuery = query(Model.find(), req, sessionKey);
     mQuery.exec(function (err, models) {
       err ? next(err) : res.json(models);
     });
@@ -14,7 +29,7 @@ module.exports = function (Model, opts) {
 
   router.create = function (req, res, next) {
     var model = new Model(req.body);
-    model[opts.sessionKey] = req[opts.sessionKey];
+    model[sessionKey] = req[sessionKey];
     model.save(function (err) {
       if (err) {
         next(err);
@@ -29,7 +44,7 @@ module.exports = function (Model, opts) {
   };
 
   router.findOne = function (req, res, next) {
-    var mQuery = mongoQuery(req, Model.findOne);
+    var mQuery = query(Model.findOne(), req, sessionKey);
     mQuery.where('_id', req.params.id);
     mQuery.exec(function (err, model) {
       if (err || !model) {
@@ -41,13 +56,13 @@ module.exports = function (Model, opts) {
   };
 
   router.update = function (req, res, next) {
-    var mQuery = mongoQuery(req, Model.findOne);
+    var mQuery = query(Model.findOne(), req, sessionKey);
     mQuery.where('_id', req.params.id);
     mQuery.exec(function (err, model) {
       if (err || !model) {
         next(err);
       } else {
-        model[opts.sessionKey] = req[opts.sessionKey];
+        model[sessionKey] = req[sessionKey];
         model.set(req.body);
         model.save(function (err) {
           err ? next(err) : res.json(model);
@@ -57,13 +72,13 @@ module.exports = function (Model, opts) {
   };
 
   router.delete = function (req, res, next) {
-    var mQuery = mongoQuery(req, Model.findOne);
+    var mQuery = query(Model.findOne(), req, sessionKey);
     mQuery.where('_id', req.params.id);
     mQuery.exec(function (err, model) {
       if (err || !model) {
         next(err);
       } else {
-        model[opts.sessionKey] = req[opts.sessionKey];
+        model[sessionKey] = req[sessionKey];
         model.remove(function (err) {
           err ? next(err) : res.json(model);
         });
@@ -81,23 +96,22 @@ module.exports = function (Model, opts) {
     .delete(router.delete);
 
   return router;
+}
 
-  function mongoQuery(req, op) {
-    var mQuery = op.call(Model);
-    var query = req.query;
+function query(mQuery, req, sessionKey) {
+  var query = req.query;
 
-    if (query.skip || query.offset) {
-      mQuery.skip(query.skip || query.offset);
-    }
-
-    if (query.populate) mQuery.populate(query.populate);
-    if (query.limit) mQuery.limit(query.limit);
-    if (query.sort) mQuery.sort(query.sort);
-    if (query.select) mQuery.select(query.select);
-    if (query.match) mQuery.where(query.match);
-
-    mQuery[opts.sessionKey] = req[opts.sessionKey];
-
-    return mQuery;
+  if (query.skip || query.offset) {
+    mQuery.skip(query.skip || query.offset);
   }
-};
+
+  if (query.populate) mQuery.populate(query.populate);
+  if (query.limit) mQuery.limit(query.limit);
+  if (query.sort) mQuery.sort(query.sort);
+  if (query.select) mQuery.select(query.select);
+  if (query.match) mQuery.where(query.match);
+
+  mQuery[sessionKey] = req[sessionKey];
+
+  return mQuery;
+}

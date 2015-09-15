@@ -14,7 +14,7 @@ var schema = mongoose.Schema({ name: 'string' }).plugin(router);
 var User = mongoose.model('User', schema);
 
 var app = express();
-app.use('/users', User.router);
+app.use('/users', User.router());
 
 app.listen(3000);
 ```
@@ -23,11 +23,11 @@ You can also use router middleware individually:
 
 ```javascript
 app
-  .get('/users', User.router.find)
-  .post('/users', User.router.create)
-  .get('/users/:id', User.router.findOne)
-  .patch('/users/:id', User.router.update)
-  .delete('/users/:id', User.router.delete);
+  .get('/users', User.router('find'))
+  .post('/users', User.router('create'))
+  .get('/users/:id', User.router('findOne'))
+  .patch('/users/:id', User.router('update'))
+  .delete('/users/:id', User.router('delete'));
 ```
 
 ### Queries
