@@ -10,7 +10,7 @@ var mongoose = require('mongoose');
 var router = require('mongoose-express-router');
 
 var db = mongoose.createConnection('mongodb://localhost/test');
-var schema = mongoose.Schema({ name: 'string }).plugin(router);
+var schema = mongoose.Schema({ name: 'string' }).plugin(router);
 var User = mongoose.model('User', schema);
 
 var app = express();
