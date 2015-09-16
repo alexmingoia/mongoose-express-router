@@ -43,17 +43,37 @@ The following query parameters are recognized:
 
 ### Session handling
 
-The session object is set on the query and/or model when available. Set the
-`sessionKey` option to specify the key to use for the session on the request
-and the model. For example, because `sessionKey` defaults to "session"
-`req.session` will be used to set `model.session` or `query.session`.
+It's often useful to have the session available in mongoose middleware to do
+things like validation and authorization.
 
-The session is meant to be accessed from middleware for validation:
+#### Accessing the session from query or model middleware
+
+```javascript
+User.pre('find', function (next) {
+  console.log(this.session);
+  next();
+});
+```
 
 ```javascript
 User.pre('save', function (next) {
-  this.session.admin ? next() : next(new Error('not an admin'));
+  console.log(this.session);
+  next();
 });
+```
+
+#### Setting the session
+
+The session is set whenever the router middleware is used, otherwise set the
+`session` query option.
+
+```javascript
+User.findOne()
+  .setOptions({ session: req.session })
+  .exec(function (err, user) {
+    console.log(user.session === req.session);
+    // => true
+  });
 ```
 
 ### Body parsing

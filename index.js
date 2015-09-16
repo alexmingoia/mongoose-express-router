@@ -1,7 +1,19 @@
 var express = require('express');
 
-module.exports = function (schema, options) {
+module.exports = function mongooseRouterPlugin(schema, options) {
   var router;
+
+  schema.pre('count', setQuerySession);
+  schema.pre('find', setQuerySession);
+  schema.pre('findOne', setQuerySession);
+  schema.pre('findOneAndRemove', setQuerySession);
+  schema.pre('findOneAndUpdate', setQuerySession);
+  schema.pre('update', setQuerySession);
+
+  schema.post('find', setResultsSession);
+  schema.post('findOne', setResultsSession);
+  schema.post('findOneAndRemove', setResultsSession);
+  schema.post('findOneAndUpdate', setResultsSession);
 
   schema.statics.router = function (op) {
     if (!router) {
@@ -17,33 +29,39 @@ module.exports = function (schema, options) {
   return schema;
 };
 
+function setQuerySession(next) {
+  this.session = this.options.session;
+  delete this.options.session;
+  next();
+}
+
+function setResultsSession(result) {
+  var session = this.session;
+
+  if (session) {
+    if (Array.isArray(result)) {
+      result.forEach(function (item) {
+        item.session = session;
+      });
+    } else {
+      result.session = session;
+    }
+  }
+}
+
 function routerGetter(Model, options) {
   var sessionKey = options.sessionKey;
   var router = express.Router();
 
-  if (options.middleware) {
-    Object.keys(options.middleware).forEach(function (key) {
-      if (router[key]) {
-        throw new Error('router.' + key + ' already exists');
-      } else {
-        router[key] = function (req, res, next) {
-          req.Model = Model;
-          options.middleware[key].apply(this, arguments);
-        };
-      }
-    });
-  }
-
   router.find = function (req, res, next) {
-    var mQuery = query(Model.find(), req, sessionKey);
-    mQuery.exec(function (err, models) {
+    query(Model.find(), req, sessionKey).exec(function (err, models) {
       err ? next(err) : res.json(models);
     });
   };
 
   router.create = function (req, res, next) {
     var model = new Model(req.body);
-    model[sessionKey] = req[sessionKey];
+    model.session = req[sessionKey];
     model.save(function (err) {
       if (err) {
         next(err);
@@ -58,47 +76,58 @@ function routerGetter(Model, options) {
   };
 
   router.findOne = function (req, res, next) {
-    var mQuery = query(Model.findOne(), req, sessionKey);
-    mQuery.where('_id', req.params.id);
-    mQuery.exec(function (err, model) {
-      if (err || !model) {
-        next(err);
-      } else {
-        res.json(model);
-      }
-    });
+    query(Model.findOne(), req, sessionKey)
+      .where('_id', req.params.id)
+      .exec(function (err, model) {
+        if (err || !model) {
+          next(err);
+        } else {
+          res.json(model);
+        }
+      });
   };
 
   router.update = function (req, res, next) {
-    var mQuery = query(Model.findOne(), req, sessionKey);
-    mQuery.where('_id', req.params.id);
-    mQuery.exec(function (err, model) {
-      if (err || !model) {
-        next(err);
-      } else {
-        model[sessionKey] = req[sessionKey];
-        model.set(req.body);
-        model.save(function (err) {
-          err ? next(err) : res.json(model);
-        });
-      }
-    });
+    query(Model.findOne(), req, sessionKey)
+      .where('_id', req.params.id)
+      .exec(function (err, model) {
+        if (err || !model) {
+          next(err);
+        } else {
+          model.set(req.body).save(function (err) {
+            err ? next(err) : res.json(model);
+          });
+        }
+      });
   };
 
   router.delete = function (req, res, next) {
-    var mQuery = query(Model.findOne(), req, sessionKey);
-    mQuery.where('_id', req.params.id);
-    mQuery.exec(function (err, model) {
-      if (err || !model) {
-        next(err);
+    query(Model.findOne(), req, sessionKey)
+      .where('_id', req.params.id)
+      .exec(function (err, model) {
+        if (err || !model) {
+          next(err);
+        } else {
+          model.remove(function (err) {
+            err ? next(err) : res.json(model);
+          });
+        }
+      });
+  };
+
+  // custom middleware has model available via `req.Model`
+  if (options.middleware) {
+    Object.keys(options.middleware).forEach(function (key) {
+      if (router[key]) {
+        throw new Error('router.' + key + ' already exists');
       } else {
-        model[sessionKey] = req[sessionKey];
-        model.remove(function (err) {
-          err ? next(err) : res.json(model);
-        });
+        router[key] = function (req, res, next) {
+          req.Model = Model;
+          options.middleware[key].apply(this, arguments);
+        };
       }
     });
-  };
+  }
 
   router.route('/')
     .get(router.find)
@@ -125,7 +154,8 @@ function query(mQuery, req, sessionKey) {
   if (query.select) mQuery.select(query.select);
   if (query.match) mQuery.where(query.match);
 
-  mQuery[sessionKey] = req[sessionKey];
+
+  mQuery.setOptions({ session: req[sessionKey] });
 
   return mQuery;
 }
