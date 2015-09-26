@@ -43,7 +43,7 @@ function setResultsSession(result) {
       result.forEach(function (item) {
         item.session = session;
       });
-    } else {
+    } else if (result) {
       result.session = session;
     }
   }
