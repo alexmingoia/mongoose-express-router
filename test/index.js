@@ -1,6 +1,8 @@
 var assert = require('assert');
 var express = require('express');
 var mongoose = require('mongoose');
+var ObjectId = require('mongoose/node_modules/mongodb').ObjectID;
+var request = require('supertest');
 var routerPlugin = require('..');
 
 mongoose.connect('mongodb://localhost:27017/mongoose-express-router-test');
@@ -38,6 +40,18 @@ describe('Model.router()', function () {
     assert.equal('function', typeof router.delete);
   });
 
+  it('registers CRUD routes', function () {
+    var schema = new mongoose.Schema();
+    schema.plugin(routerPlugin);
+    var Model = mongoose.model('ModelRouterA', schema);
+    var router = Model.router();
+    assert.equal(router.stack.length, 2);
+    assert.equal(router.stack[0].route.path, '/');
+    assert.equal(router.stack[0].route.stack.length, 2);
+    assert.equal(router.stack[1].route.path, '/:id');
+    assert.equal(router.stack[1].route.stack.length, 3);
+  });
+
   it('returns create middleware if called with "create"', function () {
     var schema = new mongoose.Schema();
     schema.plugin(routerPlugin);
@@ -45,6 +59,97 @@ describe('Model.router()', function () {
     var router = Model.router();
     var middleware = Model.router('create');
     assert.equal(middleware, router.create);
+  });
+
+  describe('"create" middleware', function () {
+    it('sets session on created model', function (done) {
+      var schema = new mongoose.Schema();
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterA2', schema);
+      Model.prototype.save = function (cb) {
+        cb(null, {});
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        res.json = function (statusCode, model) {
+          try {
+            assert.equal('object', typeof model);
+            assert.equal('foobar', model.session);
+            done();
+          } catch(err) {
+            done(err);
+          }
+        };
+        next();
+      });
+      app.use(Model.router());
+      request(app)
+        .post('/')
+        .send({ foobar: 'bazqux' })
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+
+    it('populates created model', function (done) {
+      var schema = new mongoose.Schema();
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterB2', schema);
+      Model.prototype.populate = function (query, cb) {
+        this.populated = 'foobar';
+        cb();
+      };
+      Model.prototype.save = function (cb) {
+        cb(null, {});
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        res.json = function (statusCode, model) {
+          try {
+            assert.equal('object', typeof model);
+            assert.equal('foobar', model.populated);
+            done();
+          } catch (err) {
+            done(err);
+          }
+        };
+        next();
+      });
+      app.use(Model.router());
+      request(app)
+        .post('/?populate=true')
+        .send({ foobar: 'bazqux' })
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+
+    it('passes error to callback', function (done) {
+      var schema = new mongoose.Schema();
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterK2', schema);
+      Model.prototype.save = function (cb) {
+        cb(new Error('test'));
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        next();
+      });
+      app.use(Model.router());
+      app.use(function (err, req, res, next) {
+        assert.ok(err instanceof Error);
+        assert.equal('test', err.message);
+        done();
+      });
+      request(app)
+        .post('/')
+        .send({ foobar: 'bazqux' })
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
   });
 
   it('returns find middleware if called with "find"', function () {
@@ -56,6 +161,67 @@ describe('Model.router()', function () {
     assert.equal(middleware, router.find);
   });
 
+  describe('"find" middleware', function () {
+    it('sets session', function (done) {
+      var schema = new mongoose.Schema();
+      var _find = mongoose.Query.prototype._find;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterC2', schema);
+      mongoose.Query.prototype._find = function (cb) {
+        mongoose.Query.prototype._find = _find;
+        cb(null, [{}]);
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        res.json = function (models) {
+          try {
+            assert.ok(Array.isArray(models));
+            assert.equal(models.length, 1);
+            assert.equal('foobar', models[0].session);
+            done();
+          } catch (err) {
+            done(err);
+          }
+        };
+        next();
+      });
+      app.use(Model.router());
+      request(app)
+        .get('/?limit=1&skip=0&select=name&match[name]=foobar&sort[name]=-1&populate=bazqux')
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+
+    it('passes error to callback', function (done) {
+      var schema = new mongoose.Schema();
+      var _find = mongoose.Query.prototype._find;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterJ2', schema);
+      mongoose.Query.prototype._find = function (cb) {
+        mongoose.Query.prototype._find = _find;
+        cb(new Error('test'));
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        next();
+      });
+      app.use(Model.router());
+      app.use(function (err, req, res, next) {
+        assert.ok(err instanceof Error);
+        assert.equal('test', err.message);
+        done();
+      });
+      request(app)
+        .get('/?limit=1&skip=0&select=name&match[name]=foobar&sort[name]=-1&populate=bazqux')
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+  });
+
   it('returns find middleware if called with "findOne"', function () {
     var schema = new mongoose.Schema();
     schema.plugin(routerPlugin);
@@ -63,6 +229,62 @@ describe('Model.router()', function () {
     var router = Model.router();
     var middleware = Model.router('findOne');
     assert.equal(middleware, router.findOne);
+  });
+
+  describe('"findOne" middleware', function () {
+    it('sets session', function (done) {
+      var schema = new mongoose.Schema();
+      var _findOne = mongoose.Query.prototype._findOne;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterD2', schema);
+      mongoose.Query.prototype._findOne = function (cb) {
+        mongoose.Query.prototype._findOne = _findOne;
+        cb(null, {});
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        res.json = function (model) {
+          assert.equal('object', typeof model);
+          assert.equal('foobar', model.session);
+          done();
+        };
+        next();
+      });
+      app.use(Model.router());
+      request(app)
+        .get('/' + (new ObjectId()).toString())
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+
+    it('passes error to callback', function (done) {
+      var schema = new mongoose.Schema();
+      var _findOne = mongoose.Query.prototype._findOne;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterL2', schema);
+      mongoose.Query.prototype._findOne = function (cb) {
+        mongoose.Query.prototype._findOne = _findOne;
+        cb(new Error('test'));
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        next();
+      });
+      app.use(Model.router());
+      app.use(function (err, req, res, next) {
+        assert.ok(err instanceof Error);
+        assert.equal('test', err.message);
+        done();
+      });
+      request(app)
+        .get('/' + (new ObjectId()).toString())
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
   });
 
   it('returns update middleware if called with "update"', function () {
@@ -74,6 +296,110 @@ describe('Model.router()', function () {
     assert.equal(middleware, router.update);
   });
 
+  describe('"update" middleware', function () {
+    it('sets session', function (done) {
+      var schema = new mongoose.Schema();
+      var _findOne = mongoose.Query.prototype._findOne;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterE2', schema);
+      Model.prototype.save = function (cb) {
+        cb();
+      };
+      Model.prototype.set = function () {
+        return this;
+      };
+      mongoose.Query.prototype._findOne = function (cb) {
+        mongoose.Query.prototype._findOne = _findOne;
+        cb(null, new Model());
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        res.json = function (model) {
+          assert.equal('object', typeof model);
+          assert.equal('foobar', model.session);
+          done();
+        };
+        next();
+      });
+      app.use(Model.router());
+      request(app)
+        .patch('/' + (new ObjectId()).toString())
+        .send({ foobar: 'bazqux' })
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+
+    it('passes findOne() error to callback', function (done) {
+      var schema = new mongoose.Schema();
+      var _findOne = mongoose.Query.prototype._findOne;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterP2', schema);
+      Model.prototype.save = function (cb) {
+        cb();
+      };
+      Model.prototype.set = function () {
+        return this;
+      };
+      mongoose.Query.prototype._findOne = function (cb) {
+        mongoose.Query.prototype._findOne = _findOne;
+        cb(new Error('test'));
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        next();
+      });
+      app.use(Model.router());
+      app.use(function (err, req, res, next) {
+        assert.ok(err instanceof Error);
+        assert.equal('test', err.message);
+        done();
+      });
+      request(app)
+        .patch('/' + (new ObjectId()).toString())
+        .send({ foobar: 'bazqux' })
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+
+    it('passes save() error to callback', function (done) {
+      var schema = new mongoose.Schema();
+      var _findOne = mongoose.Query.prototype._findOne;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterX2', schema);
+      Model.prototype.save = function (cb) {
+        cb(new Error('test'));
+      };
+      Model.prototype.set = function () {
+        return this;
+      };
+      mongoose.Query.prototype._findOne = function (cb) {
+        mongoose.Query.prototype._findOne = _findOne;
+        cb(null, new Model());
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        next();
+      });
+      app.use(Model.router());
+      app.use(function (err, req, res, next) {
+        assert.ok(err instanceof Error);
+        assert.equal('test', err.message);
+        done();
+      });
+      request(app)
+        .patch('/' + (new ObjectId()).toString())
+        .send({ foobar: 'bazqux' })
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+  });
+
   it('returns delete middleware if called with "delete"', function () {
     var schema = new mongoose.Schema();
     schema.plugin(routerPlugin);
@@ -81,6 +407,132 @@ describe('Model.router()', function () {
     var router = Model.router();
     var middleware = Model.router('delete');
     assert.equal(middleware, router.delete);
+  });
+
+  describe('"delete" middleware', function () {
+    it('sets session', function (done) {
+      var schema = new mongoose.Schema();
+      var _findOne = mongoose.Query.prototype._findOne;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterF2', schema);
+      Model.prototype.remove = function (cb) {
+        cb();
+      };
+      mongoose.Query.prototype._findOne = function (cb) {
+        mongoose.Query.prototype._findOne = _findOne;
+        cb(null, new Model());
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        res.json = function (model) {
+          assert.equal('object', typeof model);
+          assert.equal('foobar', model.session);
+          done();
+        };
+        next();
+      });
+      app.use(Model.router());
+      request(app)
+        .del('/' + (new ObjectId()).toString())
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+
+    it('passes findOne() error to callback', function (done) {
+      var schema = new mongoose.Schema();
+      var _findOne = mongoose.Query.prototype._findOne;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterH2', schema);
+      Model.prototype.remove = function (cb) {
+        cb();
+      };
+      mongoose.Query.prototype._findOne = function (cb) {
+        mongoose.Query.prototype._findOne = _findOne;
+        cb(new Error('test'));
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        next();
+      });
+      app.use(Model.router());
+      app.use(function (err, res, res, next) {
+        assert.ok(err instanceof Error);
+        assert.equal('test', err.message);
+        done();
+      });
+      request(app)
+        .del('/' + (new ObjectId()).toString())
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+
+    it('passes remove() error to callback', function (done) {
+      var schema = new mongoose.Schema();
+      var _findOne = mongoose.Query.prototype._findOne;
+      schema.plugin(routerPlugin);
+      var Model = mongoose.model('ModelRouterO2', schema);
+      Model.prototype.remove = function (cb) {
+        cb(new Error('test'));
+      };
+      mongoose.Query.prototype._findOne = function (cb) {
+        mongoose.Query.prototype._findOne = _findOne;
+        cb(null, new Model());
+      };
+      var app = express();
+      app.use(function (req, res, next) {
+        req.session = 'foobar';
+        next();
+      });
+      app.use(Model.router());
+      app.use(function (err, res, res, next) {
+        assert.ok(err instanceof Error);
+        assert.equal('test', err.message);
+        done();
+      });
+      request(app)
+        .del('/' + (new ObjectId()).toString())
+        .end(function (err) {
+          if (err) return done(err);
+        });
+    });
+  });
+
+  it('returns custom middleware', function (done) {
+    var schema = new mongoose.Schema();
+    schema.plugin(routerPlugin, {
+      middleware: {
+        custom: function (req, res, next) {
+          assert.equal(req.Model, Model);
+          done();
+        }
+      }
+    });
+    var Model = mongoose.model('ModelRouter7', schema);
+    var router = Model.router();
+    var middleware = Model.router('custom');
+    assert.equal(middleware, router.custom);
+    var app = express();
+    app.use(Model.router('custom'));
+    request(app).get('/').end(function (err) {
+      if (err) return done(err);
+    });
+  });
+
+  it('throws error if custom middleware already exists', function () {
+    var schema = new mongoose.Schema();
+    schema.plugin(routerPlugin, {
+      middleware: {
+        create: function (req, res, next) {}
+      }
+    });
+    var Model = mongoose.model('ModelRouter9', schema);
+    assert.throws(function () {
+      Model.router();
+    }, Error);
   });
 });
 

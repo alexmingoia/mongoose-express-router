@@ -154,7 +154,6 @@ function query(mQuery, req, sessionKey) {
   if (query.select) mQuery.select(query.select);
   if (query.match) mQuery.where(query.match);
 
-
   mQuery.setOptions({ session: req[sessionKey] });
 
   return mQuery;
