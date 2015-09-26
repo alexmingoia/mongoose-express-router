@@ -1,10 +1,15 @@
 language: node_js
 node_js:
-  - "4"
-  - "3"
-  - "2"
-  - "1"
-  - "0.12"
+- '4'
+- '3'
+- '2'
+- '1'
+- '0.12'
 notifications:
   email:
     on_success: never
+after_script:
+- ./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha test/index.js && ./node_modules/istanbul-coveralls/cli.js
+env:
+  global:
+    secure: Co69IcmSoK92G4czSNE3GpSmqqzcy2dh/cFUNaDw4DWbF/z7ztaKdksJ7SqfzuIZCp0b1578o9GV8CVHSY+zJi3+UA65nh8jG4u161YhYvJxU2TleId+TfbrmK0vPBtmuUHJKwcJn3QLzLjFcxQxkjgFUcS6JTulPMAqTl/uehK7haRctfnP2Fl6mTeIjoEV+K5RKWEfNrTN3zBzil3zO7SpGxEPDgsEh0zN8kD3T+UiwlDlIyEkFJwiXqOOp6gdnoseapgSpI52Sjpiehpy2f0nvMOO9gPdNAuoXkNg/JZmrNFtwFF5RrICmO6pQcgL24/9RFYJr6W1t8EKE5SLAJs8QIojQFvUmX0mw/ButXRFeOR3MveqcM+8ZQrgppH7ZVrnlm97fRXspKZ/72RCek65tjLqZNuX5EEpgiUEz5EGGYYCyas7eidYX9OqAIsNpSRkhOQ9sDGvZKlhqCA/Qu/mOvwjgra7sPZikfBkFwBUxvEQ7HkyUYVctT2hyCR82D3vFkuUjNCuFC1zYWRXd1Rs/orHNDBdS0p4k0AGMToEvn9DGcciH18UTyimaoG7mFObS5Teue1aTwOO44E+efW1efwPnrUHb9+rNWXVFRT9mgjA37jl5n6GKW+2PtxAE0WA2t2PoxmmpJMFt9jzQZwPqZqNtZQlhUJSjMGSUGo=

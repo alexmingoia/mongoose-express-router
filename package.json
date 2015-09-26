@@ -25,6 +25,8 @@
     "express": "^4.13.3"
   },
   "devDependencies": {
+    "istanbul": "^0.3.21",
+    "istanbul-coveralls": "^1.0.3",
     "mocha": "^2.3.2",
     "mongoose": "^4.1.8",
     "supertest": "^1.1.0"

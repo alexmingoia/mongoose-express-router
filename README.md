@@ -1,4 +1,4 @@
-# mongoose-express-router [![Build Status](https://img.shields.io/travis/alexmingoia/mongoose-express-router.svg?style=flat)](http://travis-ci.org/alexmingoia/mongoose-express-router) [![NPM version](https://img.shields.io/npm/v/mongoose-express-router.svg?style=flat)](http://badge.fury.io/js/mongoose-express-router)
+# mongoose-express-router [![Build Status](https://img.shields.io/travis/alexmingoia/mongoose-express-router.svg?style=flat)](http://travis-ci.org/alexmingoia/mongoose-express-router) [![Code Coverage](https://img.shields.io/coveralls/alexmingoia/mongoose-express-router.svg?style=flat)](https://coveralls.io/alexmingoia/mongoose-express-router) [![NPM version](https://img.shields.io/npm/v/mongoose-express-router.svg?style=flat)](http://badge.fury.io/js/mongoose-express-router)
 
 > Create Express 4 router and middleware from Mongoose 4 model.
 
